@@ -62,7 +62,7 @@ public class GameCluster
 
 public class Program
 {
-    public static async Task Main(string[] args)
+    public static void Main(string[] args)
     {
         var engine = new GameClusterEngine();
         engine.LoadAndPrepareData("data/steam.csv", "data/steamspy_tag_data.csv");  
