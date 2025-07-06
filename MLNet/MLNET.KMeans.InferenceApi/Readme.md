@@ -2,6 +2,9 @@
 
 This project provides a serverless API for querying game cluster recommendations based on ML.NET’s KMeans model. The API exposes an endpoint that retrieves a game record from DynamoDB and returns similar games in the same cluster, sorted by the closest distance to centroid.
 
+## Special Thanks
+- Kaggle.com for various Steam game datasets (https://www.kaggle.com/search?q=steam+in%3Adatasets)
+
 ## Project Purpose
 
 - **Clustering**: Uses ML.NET to group games into clusters.
@@ -11,7 +14,8 @@ This project provides a serverless API for querying game cluster recommendations
 ## Setup Steps
 
 1. **Create the DynamoDB Table Manually**  
-   - Define the table schema (e.g., partition key: `app_id`, sort key: `distance_to_centroid` if needed).
+   - Define the table schema (e.g., partition key: `cluster__id`, sort key: `distance_to_centroid` if needed).
+   - Create a Global Secondary Index (GSI) on `app_id` for obtaining a single game record.
    - Provide sufficient read/write throughput or use on-demand capacity.
 
 2. **Run the MLNet KMeans Project**  
