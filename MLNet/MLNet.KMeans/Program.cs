@@ -174,7 +174,8 @@ public sealed class GameClusterEngine
                        TagVector = tagDict[game.AppId].Select(v => v > 0 ? 1f : 0f).ToArray()
                    })
                    .ToList();
-    }
+        }
+    
 
     // ------------- PIPELINE ----------------------------------------------------
     public void TrainModel(int numberOfClusters)

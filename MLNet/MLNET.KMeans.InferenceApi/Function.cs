@@ -1,14 +1,11 @@
-using System;
-using System.Collections.Generic;
-using System.Globalization;
+using Amazon.Lambda.Core;
+using Amazon.Lambda.APIGatewayEvents;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Threading.Tasks;
-using Amazon;
 using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.Model;
-using Amazon.Lambda.APIGatewayEvents;
-using Amazon.Lambda.Core;
+using System.Globalization;
+using Amazon;
 
 [assembly: LambdaSerializer(typeof(Amazon.Lambda.Serialization.SystemTextJson.DefaultLambdaJsonSerializer))]
 
@@ -16,116 +13,93 @@ namespace MLNET.KMeans.InferenceApi
 {
     public class Function
     {
-        private readonly GameClusterRepository _repo;
-
-        public Function() : this(new AmazonDynamoDBClient(RegionEndpoint.APSoutheast2)) { }
-
-        internal Function(IAmazonDynamoDB dynamoDbClient)
+        /// <summary>
+        /// A Lambda Function Url fronted service for processing incoming POST requests for clustering predictions
+        /// </summary>
+        /// <param name="request">The event for the Lambda function handler to process.</param>
+        /// <param name="context">The ILambdaContext that provides methods for logging and describing the Lambda environment.</param>
+        /// <returns></returns>
+        public async Task<PredictionResponse> FunctionHandler(APIGatewayHttpApiV2ProxyRequest request, ILambdaContext context)
         {
-            _repo = new GameClusterRepository(dynamoDbClient);
-        }
+            // 1. Parse the incoming request JSON into PredictionRequest
+            var predictionRequest = JsonSerializer.Deserialize<PredictionRequest>(request.Body);
 
-        public async Task<PredictionResponse> FunctionHandler(
-            APIGatewayHttpApiV2ProxyRequest request,
-            ILambdaContext context)
-        {
-            var req = JsonSerializer.Deserialize<PredictionRequest>(request.Body)!;
-            var appId = int.Parse(req.AppId, CultureInfo.InvariantCulture);
-            var takeN = req.SimilarGameCount;
+            using var dynamoClient = new AmazonDynamoDBClient(RegionEndpoint.APSoutheast2);
 
-            var clusterId = (await _repo.GetClusterForAppAsync(appId)).Value;
-            var neighbours = await _repo.GetNearestNeighboursAsync(clusterId, appId, takeN);
-
-            return new PredictionResponse { Results = neighbours };
-        }
-    }
-
-    public class GameClusterRepository
-    {
-        private readonly IAmazonDynamoDB _db;
-        private const string TableName = "GameClusters";
-        private const string GsiName = "app_id-index";
-        private const string PkCluster = "cluster_id";
-        private const string SkDistance = "distance_to_centroid";
-        private const string AttrAppId = "app_id";
-        private const string AttrGameJson = "game_json";
-        private const string AttrImageUrl = "image_url";
-
-        public GameClusterRepository(IAmazonDynamoDB db) => _db = db;
-
-        public async Task<int?> GetClusterForAppAsync(int appId)
-        {
-            var q = new QueryRequest
+            var getItemReq = new GetItemRequest
             {
-                TableName = TableName,
-                IndexName = GsiName,
-                KeyConditionExpression = $"{AttrAppId} = :aid",
-                ExpressionAttributeValues =
-                    new Dictionary<string, AttributeValue>
-                    {
-                        [":aid"] = new AttributeValue { N = appId.ToString() }
-                    },
-                Limit = 1
-            };
-            var res = await _db.QueryAsync(q);
-            if (res.Items.Count == 0) return null;
-            return int.Parse(res.Items[0][PkCluster].N, CultureInfo.InvariantCulture);
-        }
-
-        public async Task<List<GameDetail>> GetNearestNeighboursAsync(
-            int clusterId,
-            int excludeAppId,
-            int count)
-        {
-            var q = new QueryRequest
-            {
-                TableName = TableName,
-                KeyConditionExpression = $"{PkCluster} = :cid",
-                ExpressionAttributeValues =
-                    new Dictionary<string, AttributeValue>
-                    {
-                        [":cid"] = new AttributeValue { N = clusterId.ToString() }
-                    },
-                ScanIndexForward = true,
-                Limit = count + 1
-            };
-
-            var res = await _db.QueryAsync(q);
-            var result = new List<GameDetail>(count);
-
-            foreach (var item in res.Items)
-            {
-                var candidateId = int.Parse(item[AttrAppId].N, CultureInfo.InvariantCulture);
-                if (candidateId == excludeAppId) continue;
-
-                // Parse the stored JSON into our strong type
-                var gData = JsonSerializer.Deserialize<Game.GameData>(
-                    item[AttrGameJson].S,
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
-
-                result.Add(new GameDetail
+                TableName = "GameClusters",
+                Key = new Dictionary<string, AttributeValue>
                 {
-                    AppId = candidateId,
-                    ClusterId = clusterId,
-                    DistanceToCentroid = float.Parse(item[SkDistance].N, CultureInfo.InvariantCulture),
-                    Title = gData.Title,
-                    Price = gData.Price,
-                    ImageUrl = item.ContainsKey(AttrImageUrl)
-                                          ? item[AttrImageUrl].S
-                                          : string.Empty
-                });
+                    // Assuming app_id is stored as a number
+                    ["app_id"] = new AttributeValue { N = predictionRequest.AppId }
+                }
+            };
 
-                if (result.Count == count) break;
+            var getItemRes = await dynamoClient.GetItemAsync(getItemReq);
+
+            if (getItemRes.Item == null || getItemRes.Item.Count == 0)
+            {
+                return new PredictionResponse
+                {
+                    Results = new List<GameDetail> { new GameDetail { Error = "Record not found." } }
+                };
             }
 
-            return result;
+            // 3. Parse the retrieved item's cluster_id and game_json
+            var clusterId = int.Parse(getItemRes.Item["cluster_id"].N, CultureInfo.InvariantCulture);
+            var distance = float.Parse(getItemRes.Item["distance_to_centroid"].N, CultureInfo.InvariantCulture);
+            var imageUrl = getItemRes.Item["image_url"].S;
+            var serializedGameJson = getItemRes.Item["game_json"].S;
+
+            // Deserialize the nested game_json object
+            var gameData = JsonSerializer.Deserialize<Game.GameData>(serializedGameJson);
+
+            // 4. Scan DynamoDB to find other records in the same cluster, sort by distance
+            //    and return only the number specified by SimilarGameCount
+            var scanReq = new ScanRequest
+            {
+                TableName = "GameClusters",
+                FilterExpression = "cluster_id = :cid",
+                ExpressionAttributeValues = new Dictionary<string, AttributeValue>
+                {
+                    [":cid"] = new AttributeValue { N = clusterId.ToString(CultureInfo.InvariantCulture) }
+                }
+            };
+
+            var scanRes = dynamoClient.ScanAsync(scanReq).Result;
+            var clusterItems = scanRes.Items
+                .Select(i =>
+                {
+                    var dist = float.Parse(i["distance_to_centroid"].N, CultureInfo.InvariantCulture);
+                    var gjson = i["game_json"].S;
+                    var gData = JsonSerializer.Deserialize<Game.GameData>(gjson);
+                    return new GameDetail
+                    {
+                        AppId = int.Parse(i["app_id"].N, CultureInfo.InvariantCulture),
+                        DistanceToCentroid = dist,
+                        ClusterId = int.Parse(i["cluster_id"].N, CultureInfo.InvariantCulture),
+                        GameJson = gjson,
+                        ParsedGame = gData,
+                        ImageUrl = i.ContainsKey("image_url") ? i["image_url"].S : string.Empty
+                    };
+                })
+                .OrderBy(x => x.DistanceToCentroid)
+                .Take(predictionRequest.SimilarGameCount)
+                .ToList();
+
+            // 5. Build and return the response, including the original item
+            return new PredictionResponse
+            {
+                Results = clusterItems
+            };
         }
     }
 
     public class PredictionRequest
     {
         [JsonPropertyName("app_id")]
-        public string AppId { get; set; } = default!;
+        public string AppId { get; set; }
 
         [JsonPropertyName("similar_game_count")]
         public int SimilarGameCount { get; set; }
@@ -134,17 +108,18 @@ namespace MLNET.KMeans.InferenceApi
     public class PredictionResponse
     {
         [JsonPropertyName("results")]
-        public IReadOnlyCollection<GameDetail> Results { get; init; } = Array.Empty<GameDetail>();
+        public IReadOnlyCollection<GameDetail> Results { get; set; } = new List<GameDetail>();
     }
 
     public class GameDetail
     {
         public int AppId { get; set; }
-        public int ClusterId { get; set; }
         public float DistanceToCentroid { get; set; }
-        public string Title { get; set; } = string.Empty;
-        public float Price { get; set; }
+        public int ClusterId { get; set; }
+        public string GameJson { get; set; } = string.Empty;
+        public Game.GameData ParsedGame { get; set; }
         public string ImageUrl { get; set; } = string.Empty;
+        public string Error { get; set; } = string.Empty;
     }
 
     public class Game
