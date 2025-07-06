@@ -1,9 +1,11 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
-VisualStudioVersion = 17.14.36121.58 d17.14
+VisualStudioVersion = 17.14.36121.58
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MLNet.KMeans", "MLNet.KMeans\MLNet.KMeans.csproj", "{32DAE69E-06AC-4DA2-9C69-E5D5E487645D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MLNET.KMeans.InferenceApi", "MLNET.KMeans.InferenceApi\MLNET.KMeans.InferenceApi.csproj", "{FC54B225-19A6-7E50-E8F6-AD6AF96FA9E8}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -15,6 +17,10 @@ Global
 		{32DAE69E-06AC-4DA2-9C69-E5D5E487645D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{32DAE69E-06AC-4DA2-9C69-E5D5E487645D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{32DAE69E-06AC-4DA2-9C69-E5D5E487645D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FC54B225-19A6-7E50-E8F6-AD6AF96FA9E8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FC54B225-19A6-7E50-E8F6-AD6AF96FA9E8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FC54B225-19A6-7E50-E8F6-AD6AF96FA9E8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FC54B225-19A6-7E50-E8F6-AD6AF96FA9E8}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

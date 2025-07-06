@@ -1,0 +1,37 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: MLNET
+
+Resources:
+  ClusteringInferenceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ClusteringInferenceFunction
+      Description: "ML.NET KMeans clustering inference Lambda with Function URL"
+      Handler: MLNET.KMeans.InferenceApi::MLNET.KMeans.InferenceApi.Function::FunctionHandler
+      Runtime: dotnet8
+      MemorySize: 512
+      Timeout: 10
+      Architectures:
+        - arm64
+      CodeUri: ./bin/Debug/net8.0
+      AutoPublishAlias: live
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - AWSXRayDaemonWriteAccess
+        - DynamoDBCrudPolicy:
+            TableName: 'GameClusters'
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+                - dynamodb:Scan
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/GameClusters/index/*'
+      FunctionUrlConfig:
+        AuthType: NONE
+
+Outputs:
+  FunctionUrl:
+    Description: "Lambda Function URL for public inference requests"
+    Value: !GetAtt ClusteringInferenceFunctionUrl.FunctionUrl

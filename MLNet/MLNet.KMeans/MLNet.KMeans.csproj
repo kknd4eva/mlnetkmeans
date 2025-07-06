@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="AWSSDK.DynamoDBv2" Version="4.0.2.1" />
     <PackageReference Include="Microsoft.ML" Version="4.0.2" />
   </ItemGroup>
 
@@ -17,6 +18,9 @@
     </None>
     <None Update="data\steamspy_tag_data.csv">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="data\steam_media_data.csv">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
   </ItemGroup>
 
