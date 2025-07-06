@@ -91,6 +91,8 @@ public class DynamoDbExportRecord
 
 public class Program
 {
+    private const string TableName = "GameClusters";
+
     public static async Task Main(string[] args)
     {
         var engine = new GameClusterEngine();
@@ -100,11 +102,53 @@ public class Program
         engine.SaveModel("data/model.zip");
 
         // Prepare records for DynamoDB export
-        var exportRecords = engine.PrepareDynamoDbExport(false);
+        var exportRecords = engine.PrepareDynamoDbExport(isTest: false);
         Console.WriteLine($"Prepared {exportRecords.Count} records for DynamoDB export.");
 
         // Write to DynamoDB table 'GameData'
         using var client = new AmazonDynamoDBClient();
+
+        // check for the table existence first
+        var tables = await client.ListTablesAsync();
+        if (!tables.TableNames.Contains(TableName))
+        {
+            Console.WriteLine($"Table {TableName} does not exist. Creating it...");
+            var createTableRequest = new CreateTableRequest
+            {
+                TableName = TableName,
+                KeySchema = new List<KeySchemaElement>
+                {
+                    new KeySchemaElement("cluster_id", KeyType.HASH),
+                    new KeySchemaElement("distance_to_centroid", KeyType.RANGE)
+                },
+                AttributeDefinitions = new List<AttributeDefinition>
+                {
+                    new AttributeDefinition("cluster_id", ScalarAttributeType.N),
+                    new AttributeDefinition("distance_to_centroid", ScalarAttributeType.N),
+                    new AttributeDefinition("app_id", ScalarAttributeType.N)
+                },
+                GlobalSecondaryIndexes = new List<GlobalSecondaryIndex>
+                {
+                    new GlobalSecondaryIndex
+                    {
+                        IndexName = "app_id-index",
+                        KeySchema = new List<KeySchemaElement>
+                        {
+                            new KeySchemaElement("app_id", KeyType.HASH)
+                        },
+                        Projection = new Projection
+                        {
+                            ProjectionType = ProjectionType.ALL
+                        },
+                        ProvisionedThroughput = new ProvisionedThroughput(5, 5)
+                    }
+                },
+                ProvisionedThroughput = new ProvisionedThroughput(5, 5)
+            };
+            await client.CreateTableAsync(createTableRequest);
+            Console.WriteLine("Table created.");
+        }
+
         foreach (var record in exportRecords)
         {
             var item = new Dictionary<string, AttributeValue>
@@ -117,13 +161,13 @@ public class Program
             };
             var request = new PutItemRequest
             {
-                TableName = "GameClusters",
+                TableName = TableName,
                 Item = item
             };
             await client.PutItemAsync(request);
         }
 
-        Console.WriteLine("All records written to DynamoDB table 'GameData'.");
+        Console.WriteLine("All records written to DynamoDB table.");
 
         Console.WriteLine("\nGetting 5 recommendations for app_id 320 (Half Life 2)…");
         foreach (var g in engine.GetSimilarGames(320, 5))
@@ -215,7 +259,6 @@ public sealed class GameClusterEngine
 
         Console.WriteLine($"\nClustering Evaluation Metrics:");
         Console.WriteLine($"  Average Distance     : {metrics.AverageDistance:F4}");
-        Console.WriteLine($"  Davies-Bouldin Index : {metrics.DaviesBouldinIndex:F4}");
 
 
         // simple cluster histogram
@@ -303,7 +346,7 @@ public sealed class GameClusterEngine
 
         for (int i = 0; i < _games.Count; i++)
         {
-            Console.WriteLine($"Processing game: {_games[i].Title} (id={_games[i].AppId})");
+            //Console.WriteLine($"Processing game: {_games[i].Title} (id={_games[i].AppId})");
             var game = _games[i];
             var clusterId = clusterIdCol[i];
 

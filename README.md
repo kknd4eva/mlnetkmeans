@@ -13,16 +13,15 @@ This project provides a serverless API for querying game cluster recommendations
 
 ## Setup Steps
 
-1. **Create the DynamoDB Table Manually**  
-   - Define the table schema (e.g., partition key: `cluster__id`, sort key: `distance_to_centroid` if needed).
-   - Create a Global Secondary Index (GSI) on `app_id` for obtaining a single game record.
-   - Provide sufficient read/write throughput or use on-demand capacity.
-
-2. **Run the MLNet KMeans Project**  
+1. **Run the MLNet KMeans Project**  
    - Generate and save the ML.NET model.  
+   - As part of the execution, the code will create a DynamoDb table named `GameClusters` as follows: 
+        -- table schema (partition key: `cluster__id`, sort key: `distance_to_centroid`).
+        -- Create a Global Secondary Index (GSI) on `app_id` for obtaining a single game record.
+        -- Provide sufficient read/write throughput or use on-demand capacity.
    - Export data to populate your DynamoDB table (if desired) using the provided functionality in the KMeans project.
 
-3. **Deploy the Inference API Using SAM**  
+2. **Deploy the Inference API Using SAM**  
    - From the root or relevant folder, run:  
      ```bash
      sam deploy --template serverless.yaml --stack-name mlnetkmeans --resolve-s3 --capabilities "CAPABILITY_IAM"
